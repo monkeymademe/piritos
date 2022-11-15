@@ -1,0 +1,53 @@
+<!-- this content will be injected on index.html by Flash server -->
+
+<script src="https://cdn.socket.io/4.5.3/socket.io.min.js" integrity="sha384-WPFUvHkB1aHA5TDSZi6xtDgkF0wXJcIIxXhC6h8OT8EH3fC5PWro5pWJ1THjcfEi" crossorigin="anonymous"></script>
+
+<script>
+
+  // since app is hosted on the same server, we should be able to simply use "io();"
+  const socket = io();
+
+
+
+  // This function will emit an event from this client to the server with associated json data obj.
+  window.updateServer = function(eventType, data, callback=null){
+    try {
+        console.log(`Client is attempting to send a "${eventType}" event to server, with data:`);
+        console.log(data);
+        socket.emit(eventType, data, (response)=>{
+          console.log(`"${eventType}" Event: server responded back with: `, response);
+          if (callback!==null) callback( response );
+        });
+    } catch (error) {
+        console.log(`error: socket is unable to emit a "${eventType}" event from the client`);
+        console.log(data);
+    }
+  }
+
+
+
+
+  // This function monitors events from server. Client will then process the event with its json data obj.
+  // List of currently available events that the client is capable of processing:
+  //
+  //  'updateState'   -- Example of full set data below. A subset of this data is allowed.
+  //     full set data = {"alertStatus": "red", "colorSchemeName": "Ritos Yellow", "shipName": "USS Big Ship", "shipClass": "New York", "shipRegistry": "NCC-1234"}
+  //
+  //  'updateSensorData'   -- Example of full set data below. A subset of this data is allowed.
+  //     full set data = {"temperature": 30, "humidity": 47.31, "pressure": 1013.25}
+  //
+  //  'remoteLogMsg'  -- Only "message" is required.  If omitted, "showTimePrefix" & "playSound" will default to false.
+  //     full set data = {"message": "hello world...!", "showTimePrefix": true, "playSound": true}
+
+  socket.onAny((eventName, ...arg)=>{
+    console.log(`event "${eventName}" received from server with parameters:`);
+    console.log(arg);
+
+    if (typeof window.processServerEvent==='function') {
+        window.processServerEvent(eventName, arg[0]); // pass to another app's handler
+    } else {
+        console.log("error: processServerEvent function is not found or not yet available");
+    }
+  });
+
+</script>
