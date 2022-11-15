@@ -126,7 +126,7 @@ def getpicowudp():
     while True:
         data, addr = sock.recvfrom(1024)
         temprature = data.decode('utf-8')
-        msg = "Recived remote sensor data from Pico W: " + temprature + "C"
+        msg = "Received remote sensor data from Pico W: " + temprature + "C"
         data = {"message": msg, "showTimePrefix": True, "playSound": True}
         print(msg)
         socketio.emit('remoteLogMsg', data, broadcast=True)
