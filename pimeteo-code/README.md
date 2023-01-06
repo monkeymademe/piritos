@@ -17,4 +17,4 @@ This code uses a DHT22 (you can use DHT11, but you will have to edit main.py) fo
 
 # Backstory
 
-The name comes from a project inside a magazine called C'T [Dutch Link to the project](https://www.ct.nl/workshops/maak-een-raspberry-weerstation/) they called the weather station project PiMeteo, so that's why I refer to this as PiMeteo
+The name comes from a project inside a magazine called C'T ([Dutch Link to the project](https://www.ct.nl/workshops/maak-een-raspberry-weerstation/)) they called the weather station project PiMeteo, so that's why I refer to this as PiMeteo
