@@ -1,4 +1,4 @@
- #!/usr/bin/python
+#!/usr/bin/env python
 
 from flask import Flask, request, render_template, jsonify, json
  #, session, copy_current_request_context
@@ -125,18 +125,35 @@ def getpicowudp():
 
     while True:
         data, addr = sock.recvfrom(1024)
-        temprature = data.decode('utf-8')
-        msg = "Received remote sensor data from Pico W: " + temprature + "C"
+        temperature = data.decode('utf-8')
+        msg = "Received remote sensor data from Pico W: " + temperature + "C"
         data = {"message": msg, "showTimePrefix": True, "playSound": True}
         print(msg)
         socketio.emit('remoteLogMsg', data, broadcast=True)
+
+# If you have a PiMeteo this little gem receives the data from the sensors and formats it and pushes it to all clients
+def getpimeteostats():
+    udp_ip = '0.0.0.0'
+    udp_port = 5006
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.bind((udp_ip, udp_port))
+
+    while True:
+        data, addr = sock.recvfrom(1024)
+        data = data.decode('utf-8')
+        temp,humid,press = data.split(",")
+        sensordata = {"Temperature":float(temp), "Humidity":float(humid), "Pressure":float(press)}
+        socketio.emit('updateSensorData', sensordata, broadcast=True)
 
 # Adding functions as a scheduled jobs because its a while loop running forever it should run in its own thread
 sched.add_job(lights)
 # Comment out the next line if you don't need the sensehat data
 sched.add_job(getsensordata, 'interval', minutes=2)
-# Comment out the next line if you don't have a Pico W sending temperture data
+# Comment out the next line if you don't have a Pico W sending temperature data
 sched.add_job(getpicowudp)
+# Comment out the next line if you don't have a PiMeteo sending temperature data
+sched.add_job(getpimeteostats)
 
 # If we're running this script directly, this portion executes. The Flask
 #  instance runs with the given parameters. Note that the "host=0.0.0.0" part
