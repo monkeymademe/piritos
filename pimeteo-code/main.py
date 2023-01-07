@@ -11,7 +11,7 @@ mpl = adafruit_mpl115a2.MPL115A2(i2c)
 dht = adafruit_dht.DHT22(board.D4, use_pulseio=False)
 
 url = "192.168.X.X" #The IP for the PiRitos Flask server
-port = 5005 #Not the same port as socketio... this is for UDP
+port = 5006 #Not the same port as socketio... this is for UDP
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sleep(2)
 
