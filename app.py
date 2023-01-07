@@ -23,6 +23,7 @@ socketio = SocketIO(app)
 # Setup apscheduler job pools
 executors = {'default': ThreadPoolExecutor(16), 'processpool': ProcessPoolExecutor(4)}
 sched = BackgroundScheduler(timezone='Asia/Seoul', executors=executors)
+running = True
 
 # Set ritos defaults for server this could save and load json from a file later
 shipName = "USS Cerritos"
@@ -85,11 +86,11 @@ def process():
 
 # Function for the lights - Using Pimoroni mote sticks
 def lights():
-    global redalertstatus
+    global serverstatus, running
     rgb = (0, 0, 0)
     r, g, b = rgb
     increment = 1
-    while True:
+    while running:
         if serverstatus["alertStatus"] == "red":
             r += increment
             if r >= 255:
@@ -109,7 +110,7 @@ def lights():
             mote.show()
             time.sleep(0.00005)
 
-# Function sending sensor data to all clients 
+# Function sending sensor data to all clients
 def getsensordata():
     global sensordata
     sensordata = {"Temperature":round(sense.temp, 2) , "Humidity":round(sense.humidity, 2) , "Pressure":round(sense.pressure, 2)}
@@ -117,13 +118,14 @@ def getsensordata():
 
 # If you have a pico w this little gem receives the data from the pico temp sensor and formats it and pushes it to all clients
 def getpicowudp():
+    global running
     udp_ip = '0.0.0.0'
     udp_port = 5005
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind((udp_ip, udp_port))
 
-    while True:
+    while running:
         data, addr = sock.recvfrom(1024)
         temperature = data.decode('utf-8')
         msg = "Received remote sensor data from Pico W: " + temperature + "C"
@@ -133,15 +135,17 @@ def getpicowudp():
 
 # If you have a PiMeteo this little gem receives the data from the sensors and formats it and pushes it to all clients
 def getpimeteostats():
+    global running, sensordata
     udp_ip = '0.0.0.0'
     udp_port = 5006
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind((udp_ip, udp_port))
 
-    while True:
+    while running:
         data, addr = sock.recvfrom(1024)
         data = data.decode('utf-8')
+        if data == "PING": continue
         temp,humid,press = data.split(",")
         sensordata = {"Temperature":float(temp), "Humidity":float(humid), "Pressure":float(press)}
         socketio.emit('updateSensorData', sensordata, broadcast=True)
@@ -162,5 +166,10 @@ sched.add_job(getpimeteostats)
 if __name__ == "__main__":
     # Start all jobs
     sched.start()
+
     # Run server on host pi's IP and hostname so it can be accessed on the local network
     socketio.run(app, host='0.0.0.0', port=5000)
+
+    # Once we stopped the socketio.run
+    running = False
+    sched.shutdown()

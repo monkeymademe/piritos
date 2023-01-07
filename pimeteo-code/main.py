@@ -15,14 +15,20 @@ port = 5005 #Not the same port as socketio... this is for UDP
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sleep(2)
 
+tries = 0
 while True:
     try:
         humidity = dht.humidity
         temperature = dht.temperature # or mpl.temperature
         pressure = mpl.pressure
+        if temperature is None or humidity is None or pressure is None:
+            tries += 1
+            sleep(2)
+            continue
         message = str(round(temperature,2)) + "," + str(round(humidity,2)) + "," + str(round(pressure,2))
         sock.sendto(bytes(message, "utf-8"), (url, port))
         print(message)
+        tries = 0
     except RuntimeError as error:
         # Errors happen fairly often, DHT's are hard to read, just keep going
         print(error.args[0])
@@ -31,4 +37,8 @@ while True:
     except Exception as error:
         dht.exit()
         raise error
-    sleep(60)
+    if tries == 0:
+        for i in range(24): # 24 * 5 = 120 seconds
+            sleep(5)
+            try: sock.sendto(bytes("PING", "utf-8"), (url, port))
+            except: continue
