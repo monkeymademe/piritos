@@ -141,14 +141,20 @@ def getpimeteostats():
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind((udp_ip, udp_port))
+    sock.settimeout(5)
 
     while running:
-        data, addr = sock.recvfrom(1024)
-        data = data.decode('utf-8')
-        if data == "PING": continue
-        temp,humid,press = data.split(",")
-        sensordata = {"Temperature":float(temp), "Humidity":float(humid), "Pressure":float(press)}
-        socketio.emit('updateSensorData', sensordata, broadcast=True)
+        try:
+            data, addr = sock.recvfrom(1024)
+            if data:
+                data = data.decode('utf-8')
+                temp,humid,press = data.split(",")
+                sensordata = {"Temperature":float(temp), "Humidity":float(humid), "Pressure":float(press)}
+                socketio.emit('updateSensorData', sensordata, broadcast=True)
+            else:
+                print ("Socket closed!")
+        except socket.timeout: # Make shutting down faster!
+            continue
 
 # Adding functions as a scheduled jobs because its a while loop running forever it should run in its own thread
 sched.add_job(lights)

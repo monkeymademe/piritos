@@ -37,8 +37,4 @@ while True:
     except Exception as error:
         dht.exit()
         raise error
-    if tries == 0:
-        for i in range(24): # 24 * 5 = 120 seconds
-            sleep(5)
-            try: sock.sendto(bytes("PING", "utf-8"), (url, port))
-            except: continue
+    if tries == 0: sleep(120)
