@@ -19,6 +19,7 @@ Thanks to Rob [@meWho_System47](https://twitter.com/meWho_System47), he helped c
 - Internet connection (Some of the JS libraries are taken from a CDN for now)
 - [SenseHat](https://www.raspberrypi.com/products/sense-hat/) (Optional for sensor data)
 - Cables, SD Card etc
+- [DHT](https://learn.adafruit.com/dht) + [MPL115A2](https://www.adafruit.com/product/992) (Optional for sensor data, See [pimeteo-code](pimeteo-code/README.md))
 
 ## Usage
 
