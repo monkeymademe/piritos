@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 from flask import Flask, request, render_template, jsonify, json
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -148,14 +148,13 @@ enablePicoData = False
 def getpicowudp():
     udp_ip = '0.0.0.0'
     udp_port = 5005
-
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind((udp_ip, udp_port))
 
     while True:
         data, addr = sock.recvfrom(1024)
-        temprature = data.decode('utf-8')
-        msg = "Received remote sensor data from Pico W: " + temprature + "C"
+        temperature = data.decode('utf-8')
+        msg = "Received remote sensor data from Pico W: " + temperature + "C"
         data = {"message": msg, "showTimePrefix": True, "playSound": True}
         print(msg)
         socketio.emit('remoteLogMsg', data, broadcast=True)
