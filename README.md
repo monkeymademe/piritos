@@ -30,11 +30,11 @@ sudo apt update && sudo apt upgrade -y
 ```
 - Install pip and flask
 ```bash
-sudo apt-get install python3-pip python3-flask
+sudo apt-get install python3-pip python3-flask 
 ```
-- Use the package manager [pip](https://pip.pypa.io/en/stable/) to install socketio and APScheduler
+- Use the package manager [pip](https://pip.pypa.io/en/stable/) to install socketio, APScheduler and gevent-websocket
 ```bash
-pip install flask-socketio Flask-APScheduler
+pip install flask-socketio Flask-APScheduler gevent-websocket
 
 ```
 - Clone this repo
