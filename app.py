@@ -18,6 +18,12 @@ enableNews = True
 if enableNews:
     import feedparser
 
+# Requests (not to be confused with flask request) is required for the weather feature.
+# Set enableWeather to false to disable the feature
+enableWeather = True
+if enableWeather:
+    import requests
+
 # Sense hat is for the sensor data normally on the pi running the server.
 # Set enableSense to false to disable the featue
 enableSense = True
@@ -85,7 +91,7 @@ def fetchStatus(data):
     remoteLogMsg = {"message":msg, "showTimePrefix":True}
     print(msg)
     emit('remoteLogMsg', remoteLogMsg)
-    socketio.emit('updateSensorData', sensordata, broadcast=True)
+    emit('updateSensorData', sensordata, broadcast=True)
     print(serverstatus)
     return serverstatus
 
@@ -136,10 +142,11 @@ def lights():
                 mote.show()
                 time.sleep(0.00005)
 
-# Function sending sensor data to all clients 
+# Function sending sensor data to all clients
 def getsensordata():
     global sensordata
     sensordata = {"Temperature":round(sense.temp, 2) , "Humidity":round(sense.humidity, 2) , "Pressure":round(sense.pressure, 2)}
+    print(sensordata)
     socketio.emit('updateSensorData', sensordata, broadcast=True)
 
 # If you have a pico w this little gem receives the data from the pico temp sensor and formats it and pushes it to all clients
@@ -168,13 +175,65 @@ def getbbcheadline():
     print(msg)
     socketio.emit('remoteLogMsg', data, broadcast=True)
 
+def getweatherdata():
+    # Set your Longitude and Latitude for your location (default is for Berlin Germany)
+    longitude = 13.55
+    latitude = 52.41
+    url = f'https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&current_weather=true'
+    response = requests.get(url)
+    data = response.json()
+    current_weather = data["current_weather"]
+    temperature = current_weather["temperature"]
+    weathercode = current_weather["weathercode"]
+    weather_codes = {
+    0:"Clear skies",
+    1:"Mainly clear skies",
+    2:"Partly cloudy",
+    3:"Overcast",
+    45:"Foggy",
+    48:"Depositing rime fog",
+    51:"Light drizzle",
+    53:"Moderate drizzle",
+    55:"Dense drizzle",
+    56:"Light freezing drizzle",
+    57:"Dense freezing drizzle",
+    61:"Slight rain",
+    63:"Moderate rain",
+    65:"Heavy rain",
+    66:"Light freezing rain",
+    67:"Heavy freezing rain",
+    71:"Slight snow fall",
+    73:"Moderate snow fall",
+    75:"Heavy snow fall",
+    77:"Snow grains",
+    80:"Slight rain showers",
+    81:"Moderate rain showers",
+    82:"Violent rain showers",
+    85:"Slight snow showers",
+    86:"Heavy snow showers",
+    95:"Slight to moderate thunderstorm",
+    96:"Thunderstorm with slight hail",
+    99:"Thunderstorm with heavy hail"
+    }
+    weather_description = weather_codes.get(weathercode, "Unknown weather code")
+    msg = f"Historical weather data - Temperature:'{temperature}' Weather classification:'{weather_description}'"
+    data = {"message": msg, "showTimePrefix": True, "playSound": True}
+    print(msg)
+    socketio.emit('remoteLogMsg', data, broadcast=True)
+
 # Adding functions as a scheduled jobs because its a while loop running forever it should run in its own thread
 sched.add_job(lights)
 if enableSense:
+    print("SenseHat enabled")
     sched.add_job(getsensordata, 'interval', minutes=2)
 if enableNews:
+    print("News enabled")
     sched.add_job(getbbcheadline, 'interval', minutes=10)
+if enableWeather:
+    print("Weather enabled")
+    sched.add_job(getweatherdata, 'interval', minutes=30)
 if enablePicoData:
+    print("Picodata enabled")
     sched.add_job(getpicowudp)
 
 # If we're running this script directly, this portion executes. The Flask
