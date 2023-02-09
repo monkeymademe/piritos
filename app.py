@@ -5,6 +5,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor
 from flask_socketio import SocketIO, emit
 import time, random
+from datetime import datetime
+
 
 # Socket (not SocketIO) is used to receive TCP data from the PicoW
 # Set enablePicoData to false if you wish to disable this featue
@@ -23,6 +25,7 @@ if enableNews:
 enableWeather = True
 if enableWeather:
     import requests
+    weather_message = "Historical weather data not available."
 
 # Sense hat is for the sensor data normally on the pi running the server.
 # Set enableSense to false to disable the featue
@@ -92,6 +95,7 @@ def fetchStatus(data):
     print(msg)
     emit('remoteLogMsg', remoteLogMsg)
     emit('updateSensorData', sensordata, broadcast=True)
+    sendmessage(weather_message, True, True)
     print(serverstatus)
     return serverstatus
 
@@ -146,12 +150,10 @@ def lights():
 def getsensordata():
     global sensordata
     sensordata = {"Temperature":round(sense.temp, 2) , "Humidity":round(sense.humidity, 2) , "Pressure":round(sense.pressure, 2)}
-    print(sensordata)
+    print(f"Sensorhat data sent to clients: {sensordata}")
     socketio.emit('updateSensorData', sensordata, broadcast=True)
 
 # If you have a pico w this little gem receives the data from the pico temp sensor and formats it and pushes it to all clients
-# Set enablePicoData to false if you wish to disable this featue
-enablePicoData = False
 def getpicowudp():
     udp_ip = '0.0.0.0'
     udp_port = 5005
@@ -162,19 +164,17 @@ def getpicowudp():
         data, addr = sock.recvfrom(1024)
         temperature = data.decode('utf-8')
         msg = "Received remote sensor data from Pico W: " + temperature + "C"
-        data = {"message": msg, "showTimePrefix": True, "playSound": True}
-        print(msg)
-        socketio.emit('remoteLogMsg', data, broadcast=True)
+        sendmessage(msg, True, True)
 
+# If enabled you can get the last bbc headline sent to the all connected clients
 def getbbcheadline():
     feed_url = "http://feeds.bbci.co.uk/news/rss.xml"
     feed = feedparser.parse(feed_url)
     entry = feed.entries[0]
     msg = "Viewing historical news data: " + entry.title
-    data = {"message": msg, "showTimePrefix": True, "playSound": True}
-    print(msg)
-    socketio.emit('remoteLogMsg', data, broadcast=True)
+    sendmessage(msg, True, True)
 
+# If enabled you can get the current weather report from open-meteo.com sent to the all connected clients normally this is set to every 30 mins to prevent spam
 def getweatherdata():
     # Set your Longitude and Latitude for your location (default is for Berlin Germany)
     longitude = 13.55
@@ -215,11 +215,22 @@ def getweatherdata():
     96:"Thunderstorm with slight hail",
     99:"Thunderstorm with heavy hail"
     }
+    # weather_message is pulled and written over to update the message for newly connected clients without having to pull from the server again
+    global weather_message
     weather_description = weather_codes.get(weathercode, "Unknown weather code")
-    msg = f"Historical weather data - Temperature:'{temperature}' Weather classification:'{weather_description}'"
-    data = {"message": msg, "showTimePrefix": True, "playSound": True}
-    print(msg)
+    weather_message = f"Historical weather data - Temperature:'{temperature}' Weather classification:'{weather_description}'"
+    print(f"Fetched weather data from open-meteo.com - Temp: {temperature}, Weather code: {weathercode}")
+    sendmessage(weather_message, True, True)
+
+# Function that runs every 2 minutes to sent whats in weather_message to all connected clients so that we are not pulling from open-meteo too offten
+def sendweatherdata():
+    sendmessage(weather_message, True, True)
+
+# Standard send message to log function
+def sendmessage(msg, showTimePrefix=False, playSound=False):
+    data = {"message": msg, "showTimePrefix": showTimePrefix, "playSound": playSound}
     socketio.emit('remoteLogMsg', data, broadcast=True)
+    print(f"Message sent to clients: {msg}")
 
 # Adding functions as a scheduled jobs because its a while loop running forever it should run in its own thread
 sched.add_job(lights)
@@ -231,7 +242,9 @@ if enableNews:
     sched.add_job(getbbcheadline, 'interval', minutes=10)
 if enableWeather:
     print("Weather enabled")
+    getweatherdata()
     sched.add_job(getweatherdata, 'interval', minutes=30)
+    sched.add_job(sendweatherdata, 'interval', minutes=3)
 if enablePicoData:
     print("Picodata enabled")
     sched.add_job(getpicowudp)
