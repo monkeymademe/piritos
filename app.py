@@ -9,41 +9,51 @@ from datetime import datetime
 
 
 # Socket (not SocketIO) is used to receive TCP data from the PicoW
-# Set enablePicoData to false if you wish to disable this featue
+# Set enablePicoData to False if you wish to disable this featue
 enablePicoData = False
 if enablePicoData:
     import socket
 
 # Feedparser is required for the bbc headline feed.
-# Set enableNews to false to disable the feature
+# Set enableNews to False to disable the feature
 enableNews = True
 if enableNews:
     import feedparser
 
 # Requests (not to be confused with flask request) is required for the weather feature.
-# Set enableWeather to false to disable the feature
+# Set enableWeather to False to disable the feature
 enableWeather = True
 if enableWeather:
     import requests
     weather_message = "Historical weather data not available."
 
 # Sense hat is for the sensor data normally on the pi running the server.
-# Set enableSense to false to disable the featue
+# Set enableSense to False to disable the featue
 enableSense = True
 if enableSense:
     from sense_hat import SenseHat
     sense = SenseHat()
 
 # Mote is for the Pimoroni Mote stick LEDs.
-# Set enableLights to false or replace this code and the code in the lights fuction with your own LED system
+# Set enableLights to False or replace this code and the code in the lights fuction with your own LED system
 enableLights = True
 if enableLights:
-    from mote import Mote
-    mote = Mote()
-    mote.configure_channel(1, 16, False)
-    mote.configure_channel(2, 16, False)
-    mote.configure_channel(3, 16, False)
-    mote.configure_channel(4, 16, False)
+    try:
+        from mote import Mote
+        mote = Mote()
+        mote.configure_channel(1, 16, False)
+        mote.configure_channel(2, 16, False)
+        mote.configure_channel(3, 16, False)
+        mote.configure_channel(4, 16, False)
+    except OSError as e:
+        print("Mote lights disabled due to an exception: ", e)
+        enableLights = False
+
+# PiMeteo is like an alternative to sensehat and will send the weather sensor data of the pimeteo you link
+# Set enablePimeteo to True if you have a PiMeteo setup up and running and also running the code you can find in the pimeteo-code/ folder
+enablePimeteo = False
+if enablePimeteo and not(enablePicoData):
+    import socket
 
 # Create an instance of flask called "app" and setup socketio
 app = Flask(__name__, static_url_path='/static')
@@ -74,6 +84,10 @@ serverstatus = {"alertStatus":"normal", "colorSchemeName":colorSchemeName, "ship
 if enableSense:
     sensordata = {"Temperature":round(sense.temp, 2) , "Humidity":round(sense.humidity, 2) , "Pressure":round(sense.pressure, 2)}
 
+# Just to set the variable if it is not set yet
+if enablePimeteo and not(enableSense):
+    sensordata = {"Temperature":round(0, 2) , "Humidity":round(0, 2) , "Pressure":round(0, 2)}
+
 # Had issues with JSON from clients JS so this function cleans up the JSON for Python
 def fixjson(data):
     json_string = json.dumps(data)
@@ -94,8 +108,10 @@ def fetchStatus(data):
     remoteLogMsg = {"message":msg, "showTimePrefix":True}
     print(msg)
     emit('remoteLogMsg', remoteLogMsg)
-    emit('updateSensorData', sensordata, broadcast=True)
-    sendmessage(weather_message, True, True)
+    if enableSense or enablePimeteo:
+        emit('updateSensorData', sensordata, broadcast=True)
+    if enableWeather:
+        sendmessage(weather_message, True, True)
     print(serverstatus)
     return serverstatus
 
@@ -232,6 +248,27 @@ def sendmessage(msg, showTimePrefix=False, playSound=False):
     socketio.emit('remoteLogMsg', data, broadcast=True)
     print(f"Message sent to clients: {msg}")
 
+# If you have a PiMeteo this little gem receives the data from the sensors and formats it and pushes it to all clients
+def getpimeteostats():
+    global sensordata
+    udp_ip = '0.0.0.0'
+    udp_port = 5006
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.bind((udp_ip, udp_port))
+    sock.settimeout(5)
+
+    while True:
+        try:
+            data, addr = sock.recvfrom(1024)
+            if data:
+                data = data.decode('utf-8')
+                temp,humid,press = data.split(",")
+                sensordata = {"Temperature":round(temp, 2), "Humidity":round(humid, 2), "Pressure":round(press, 2)}
+                socketio.emit('updateSensorData', sensordata, broadcast=True)
+        except socket.timeout:
+            continue # makes the shutting down faster because we don't have to wait 2 minutes
+
+
 # Adding functions as a scheduled jobs because its a while loop running forever it should run in its own thread
 sched.add_job(lights)
 if enableSense:
@@ -248,6 +285,9 @@ if enableWeather:
 if enablePicoData:
     print("Picodata enabled")
     sched.add_job(getpicowudp)
+if enablePimeteo:
+    print("Pimeteo enabled")
+    sched.add_job(getpimeteostats)
 
 # If we're running this script directly, this portion executes. The Flask
 #  instance runs with the given parameters. Note that the "host=0.0.0.0" part
