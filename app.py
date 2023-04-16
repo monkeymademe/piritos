@@ -78,7 +78,7 @@ if enableRandomColorScheme:
     colorSchemeName = random.choice(possibleColorScheme)
 
 # Merge Above defaults into JSON
-serverstatus = {"alertStatus":"normal", "colorSchemeName":colorSchemeName, "shipName":shipName, "shipClass":shipClass, "shipRegistry":shipRegistry, "themeColor":"rgb(255, 211, 0)", "themeColorR":255, "themeColorG":211, "themeColorR":0}
+serverstatus = {"alertStatus":"normal", "colorSchemeName":colorSchemeName, "shipName":shipName, "shipClass":shipClass, "shipRegistry":shipRegistry, "themeColor":"rgb(255, 211, 0)", "themeColorR":255, "themeColorG":211, "themeColorB":0}
 
 # Pulling Sensor data from sensehat
 if enableSense:
