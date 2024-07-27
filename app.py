@@ -29,14 +29,14 @@ if enableWeather:
 
 # Sense hat is for the sensor data normally on the pi running the server.
 # Set enableSense to False to disable the featue
-enableSense = True
+enableSense = False
 if enableSense:
     from sense_hat import SenseHat
     sense = SenseHat()
 
 # Mote is for the Pimoroni Mote stick LEDs.
 # Set enableLights to False or replace this code and the code in the lights fuction with your own LED system
-enableLights = True
+enableLights = False
 if enableLights:
     try:
         from mote import Mote
@@ -107,9 +107,9 @@ def fetchStatus(data):
     msg = "Client " + str(clientuid['clientUid']) + " requested status"
     remoteLogMsg = {"message":msg, "showTimePrefix":True}
     print(msg)
-    emit('remoteLogMsg', remoteLogMsg)
+    socketio.emit('remoteLogMsg', remoteLogMsg)
     if enableSense or enablePimeteo:
-        emit('updateSensorData', sensordata, broadcast=True)
+        socketio.emit('updateSensorData', sensordata)
     if enableWeather:
         sendmessage(weather_message, True, True)
     print(serverstatus)
@@ -121,7 +121,7 @@ def setStatus(data):
     clientstatus = fixjson(data)
     global serverstatus
     serverstatus = serverstatus | clientstatus
-    emit('updateState', serverstatus, broadcast=True)
+    socketio.emit('updateState', serverstatus)
 
 # Default handler, if no path is given
 @app.route("/")
@@ -167,7 +167,7 @@ def getsensordata():
     global sensordata
     sensordata = {"Temperature":round(sense.temp, 2) , "Humidity":round(sense.humidity, 2) , "Pressure":round(sense.pressure, 2)}
     print(f"Sensorhat data sent to clients: {sensordata}")
-    socketio.emit('updateSensorData', sensordata, broadcast=True)
+    socketio.emit('updateSensorData', sensordata)
 
 # If you have a pico w this little gem receives the data from the pico temp sensor and formats it and pushes it to all clients
 def getpicowudp():
@@ -245,7 +245,7 @@ def sendweatherdata():
 # Standard send message to log function
 def sendmessage(msg, showTimePrefix=False, playSound=False):
     data = {"message": msg, "showTimePrefix": showTimePrefix, "playSound": playSound}
-    socketio.emit('remoteLogMsg', data, broadcast=True)
+    socketio.emit('remoteLogMsg', data)
     print(f"Message sent to clients: {msg}")
 
 # If you have a PiMeteo this little gem receives the data from the sensors and formats it and pushes it to all clients
@@ -264,7 +264,7 @@ def getpimeteostats():
                 data = data.decode('utf-8')
                 temp,humid,press = data.split(",")
                 sensordata = {"Temperature":round(temp, 2), "Humidity":round(humid, 2), "Pressure":round(press, 2)}
-                socketio.emit('updateSensorData', sensordata, broadcast=True)
+                socketio.emit('updateSensorData', sensordata)
         except socket.timeout:
             continue # makes the shutting down faster because we don't have to wait 2 minutes
 
