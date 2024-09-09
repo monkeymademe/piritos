@@ -28,22 +28,26 @@ Thanks to Rob [@meWho_System47](https://twitter.com/meWho_System47), he helped c
 ```bash
 sudo apt update && sudo apt upgrade -y
 ```
-- Install pip and flask
+- Install python3 and pip3 and flask
 ```bash
-sudo apt-get install python3-pip python3-flask 
+sudo apt-get install python3 python3-pip
 ```
-- Use the package manager [pip](https://pip.pypa.io/en/stable/) to install socketio, APScheduler and gevent-websocket
-```bash
-pip install flask-socketio Flask-APScheduler gevent-websocket
 
-```
 - Clone this repo
-- Goto the piritos directory
-- Run: 
+- `cd` into the piritos directory
+- Create a virtual environment and install dependencies
+
 ```bash
+python3 -m venv my_env
+source my_env/bin/activate
+pip3 install -r requirements.txt
+```
+
+Start the server
+```
 python app.py
 ```
-- Open your broswer and goto the ip of your raspberry pi/flask server
+- Open your browser and goto the ip of your raspberry pi/flask server
 
 ## Contributing
 
