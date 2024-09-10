@@ -3,3 +3,5 @@ Flask-APScheduler==1.13.1
 Flask-SocketIO==5.3.7
 gevent-websocket==0.10.1
 requests==2.32.3
+sense-hat==2.6.0
+mote==0.0.4
