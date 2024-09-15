@@ -3,3 +3,8 @@ Flask-APScheduler==1.13.1
 Flask-SocketIO==5.3.7
 gevent-websocket==0.10.1
 requests==2.32.3
+sense-hat==2.6.0
+mote==0.0.4
+pydantic_core==2.20.1
+pydantic==2.8.2
+HomeAssistant-API==4.2.2.post1

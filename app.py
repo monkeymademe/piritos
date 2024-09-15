@@ -7,37 +7,50 @@ from flask_socketio import SocketIO, emit
 import time, random
 from datetime import datetime
 
+# Create an instance of flask called "app" and setup socketio
+app = Flask(__name__, static_url_path='/static')
+# load Production or Development config as appropriate
+# app.config.from_object('config.ProductionConfig')
+app.config.from_object('config.DevelopmentConfig')
+socketio = SocketIO(app)
+
+# Setup apscheduler job pool
+executors = {'default': ThreadPoolExecutor(16), 'processpool': ProcessPoolExecutor(4)}
+sched = BackgroundScheduler(timezone=app.config["TIME_ZONE"], executors=executors)
+
+###
+# Conditionally enable modules based on config.
+# News and Weather are on by default
 
 # Socket (not SocketIO) is used to receive TCP data from the PicoW
 # Set enablePicoData to False if you wish to disable this featue
-enablePicoData = False
+enablePicoData = app.config["ENABLE_PICO_DATA"]
 if enablePicoData:
     import socket
 
 # Feedparser is required for the bbc headline feed.
-# Set enableNews to False to disable the feature
-enableNews = True
+enableNews = app.config["ENABLE_NEWS"]
 if enableNews:
     import feedparser
 
 # Requests (not to be confused with flask request) is required for the weather feature.
-# Set enableWeather to False to disable the feature
-enableWeather = True
+enableWeather = app.config["ENABLE_WEATHER"]
 if enableWeather:
     import requests
     weather_message = "Historical weather data not available."
 
 # Sense hat is for the sensor data normally on the pi running the server.
-# Set enableSense to False to disable the featue
-enableSense = False
-if enableSense:
+# Set ENABLE_SENSE_HAT to False to disable the featue
+enableSenseHat = app.config["ENABLE_SENSE_HAT"]
+if enableSenseHat:
     from sense_hat import SenseHat
     sense = SenseHat()
 
 # Mote is for the Pimoroni Mote stick LEDs.
-# Set enableLights to False or replace this code and the code in the lights fuction with your own LED system
-enableLights = False
-if enableLights:
+# Set enableMotes to False or replace this code and the code in the 
+# lights function with your own LED system
+enableMotes = app.config["ENABLE_MOTES"]
+if enableMotes:
     try:
         from mote import Mote
         mote = Mote()
@@ -47,32 +60,45 @@ if enableLights:
         mote.configure_channel(4, 16, False)
     except OSError as e:
         print("Mote lights disabled due to an exception: ", e)
-        enableLights = False
+        enableMotes = False
 
 # PiMeteo is like an alternative to sensehat and will send the weather sensor data of the pimeteo you link
-# Set enablePimeteo to True if you have a PiMeteo setup up and running and also running the code you can find in the pimeteo-code/ folder
-enablePimeteo = False
+# Set ENABLE_PIMETEO to True if you have a PiMeteo setup up and running and also running the code you can find in the pimeteo-code/ folder
+enablePimeteo = app.config["ENABLE_PIMETEO"]
 if enablePimeteo and not(enablePicoData):
     import socket
 
-# Create an instance of flask called "app" and setup socketio
-app = Flask(__name__, static_url_path='/static')
-app.config['SECRET_KEY'] = 'secret!'
-socketio = SocketIO(app)
+# All the Home Assistant Configuration 
+enableHomeAssistant = app.config['ENABLE_HA']
+if enableHomeAssistant:
+    from homeassistant_api import Client
 
-# Setup apscheduler job pool
-executors = {'default': ThreadPoolExecutor(16), 'processpool': ProcessPoolExecutor(4)}
-sched = BackgroundScheduler(timezone='Asia/Seoul', executors=executors)
+    # Setup HA client
+    haServer        = app.config['HA_API_SERVER']
+    haToken         = app.config['HA_TOKEN']
+    # Set request verify to False if you're using a self signed cert
+    haClient        = Client(haServer, haToken, 
+                             global_request_kwargs={'verify': True}, 
+                             cache_session=False)
 
-# Set ritos defaults for server this could save and load json from a file later
-shipName = "USS Cerritos"
-shipClass = "California"
-shipRegistry = "NCC-75567"
-colorSchemeName = "Ritos Yellow"
+    enableHaTemp    = app.config['ENABLE_HA_TEMP']
+    if enableHaTemp:
+        haConfig    = haClient.get_config()
+        haLatitude  = float(haConfig.get('latitude'))
+        haLongitude = float(haConfig.get('longitude'))
+    
+    enableHaLights  = app.config['ENABLE_HA_LIGHTS']
+
+###
+# Configure UI appearance
+shipName        = app.config["SHIP_NAME"]
+shipClass       = app.config['SHIP_CLASS']
+shipRegistry    = app.config['SHIP_REGISTRY']
+colorSchemeName = app.config['COLOR_SCHEME']
 
 # Below is the list of possible color schemes available in the Ritos LCARS.
 # For a little fun set enableRandomColorScheme to true if you want to set the theme randomly when the server boots
-enableRandomColorScheme = False
+enableRandomColorScheme = app.config['RANDOM_COLOR_SCHEME']
 if enableRandomColorScheme:
     possibleColorScheme = ["Ritos Yellow", "Sickbay Aqua", "Picard Gray", "Nemesis Cyan", "Padd Blue", "Titan PurpleHead", "Vancouver Orange", "Merced Green", "Oakland Glory", "Inglewood Violet", "Carlsbad Nature", "Prodigy Blast", "Ketracel White", "Disco Beige", "Shipyard Blueprint", "Shipyard Blueprint II", "Red Alert"]
     colorSchemeName = random.choice(possibleColorScheme)
@@ -81,11 +107,11 @@ if enableRandomColorScheme:
 serverstatus = {"alertStatus":"normal", "colorSchemeName":colorSchemeName, "shipName":shipName, "shipClass":shipClass, "shipRegistry":shipRegistry, "themeColor":"rgb(255, 211, 0)", "themeColorR":255, "themeColorG":211, "themeColorB":0}
 
 # Pulling Sensor data from sensehat
-if enableSense:
+if enableSenseHat:
     sensordata = {"Temperature":round(sense.temp, 2) , "Humidity":round(sense.humidity, 2) , "Pressure":round(sense.pressure, 2)}
 
 # Just to set the variable if it is not set yet
-if enablePimeteo and not(enableSense):
+if enablePimeteo and not(enableSenseHat):
     sensordata = {"Temperature":round(0, 2) , "Humidity":round(0, 2) , "Pressure":round(0, 2)}
 
 # Had issues with JSON from clients JS so this function cleans up the JSON for Python
@@ -108,7 +134,7 @@ def fetchStatus(data):
     remoteLogMsg = {"message":msg, "showTimePrefix":True}
     print(msg)
     socketio.emit('remoteLogMsg', remoteLogMsg)
-    if enableSense or enablePimeteo:
+    if enableSenseHat or enablePimeteo:
         socketio.emit('updateSensorData', sensordata)
     if enableWeather:
         sendmessage(weather_message, True, True)
@@ -137,8 +163,26 @@ def process():
 
 # Function for the lights - Using Pimoroni mote sticks
 def lights():
-    if enableLights:
-        global redalertstatus
+    global serverstatus
+    redalertlights = False
+
+    if enableHaLights:
+        while True:
+            time.sleep(0.05)
+            if serverstatus["alertStatus"] == "red" and redalertlights == False:
+                scene = haClient.get_domain('scene')
+                scene.turn_on(entity_id='scene.red_alert')
+                print(f'Set Red Alert scene')
+                redalertlights = True
+                time.sleep(0.05)
+            elif serverstatus["alertStatus"] == "normal" and redalertlights == True:
+                scene = haClient.get_domain('scene')
+                scene.turn_on(entity_id='scene.office_normal')
+                print(f'Set Normal scene')
+                redalertlights = False
+                time.sleep(0.05)
+
+    elif enableMotes:
         rgb = (0, 0, 0)
         r, g, b = rgb
         increment = 1
@@ -184,7 +228,7 @@ def getpicowudp():
 
 # If enabled you can get the last bbc headline sent to the all connected clients
 def getbbcheadline():
-    feed_url = "http://feeds.bbci.co.uk/news/rss.xml"
+    feed_url = app.config["NEWS_FEED_URL"]
     feed = feedparser.parse(feed_url)
     entry = feed.entries[0]
     msg = "Viewing historical news data: " + entry.title
@@ -192,9 +236,16 @@ def getbbcheadline():
 
 # If enabled you can get the current weather report from open-meteo.com sent to the all connected clients normally this is set to every 30 mins to prevent spam
 def getweatherdata():
-    # Set your Longitude and Latitude for your location (default is for Berlin Germany)
-    longitude = 13.55
-    latitude = 52.41
+    global haLatitude
+    global haLongitude
+    # Set latitude and longitude in the config or get them from Home Assistant
+    if enableHomeAssistant:
+        latitude    = haLatitude
+        longitude   = haLongitude
+    else:
+        longitude = app.config['WEATHER_LAT']
+        latitude  = app.config['WEATHER_LONG']
+    
     url = f'https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&current_weather=true'
     response = requests.get(url)
     data = response.json()
@@ -268,10 +319,33 @@ def getpimeteostats():
         except socket.timeout:
             continue # makes the shutting down faster because we don't have to wait 2 minutes
 
+# Fetch sensor data from HomeAssistant, format it and push it to all clients
+def getHaSensorData():
+    global haClient
+    global sensordata
+
+    office_temp_entity      = haClient.get_entity(entity_id='sensor.acurite_tower_b_7114_t')
+    temp_f                  = office_temp_entity.state.state
+    temp                    = (float(temp_f) - 32) * 5/9
+
+
+    office_humidity_entity  = haClient.get_entity(entity_id='sensor.acurite_tower_b_7114_h')
+    humid                   = int(office_humidity_entity.state.state)
+
+    # TODO: get a pressure sensor online
+    # office_pressure_entity  = haClient.get_entity(entity_id='sensor.GET_A_PRESSURE_SENSOR')
+    # press                   = int(office_pressure_entity.state.state)
+    press                   = -1
+
+    sensordata = {"Temperature":round(temp, 2), "Humidity":round(humid, 2), "Pressure":round(press, 2)}
+    socketio.emit('updateSensorData', sensordata)
+    print(f'Sent HA Sensor Data: {sensordata}')
+
+
 
 # Adding functions as a scheduled jobs because its a while loop running forever it should run in its own thread
 sched.add_job(lights)
-if enableSense:
+if enableSenseHat:
     print("SenseHat enabled")
     sched.add_job(getsensordata, 'interval', minutes=2)
 if enableNews:
@@ -288,6 +362,9 @@ if enablePicoData:
 if enablePimeteo:
     print("Pimeteo enabled")
     sched.add_job(getpimeteostats)
+if enableHaTemp:
+    print("Home Assistant Sensor Data Enabled")
+    sched.add_job(getHaSensorData, 'interval', seconds=10)
 
 # If we're running this script directly, this portion executes. The Flask
 #  instance runs with the given parameters. Note that the "host=0.0.0.0" part
@@ -297,4 +374,4 @@ if __name__ == "__main__":
     # Start all jobs
     sched.start()
     # Run server on host pi's IP and hostname so it can be accessed on the local network
-    socketio.run(app, host='0.0.0.0', port=5000)
+    socketio.run(app, host=app.config['APP_IP'], port=app.config['APP_PORT'], debug=app.config['DEBUG'])
