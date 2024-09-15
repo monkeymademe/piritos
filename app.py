@@ -68,6 +68,27 @@ enablePimeteo = app.config["ENABLE_PIMETEO"]
 if enablePimeteo and not(enablePicoData):
     import socket
 
+# All the Home Assistant Configuration 
+enableHomeAssistant = app.config['ENABLE_HA']
+if enableHomeAssistant:
+    from homeassistant_api import Client
+
+    # Setup HA client
+    haServer        = app.config['HA_API_SERVER']
+    haToken         = app.config['HA_TOKEN']
+    # Set request verify to False if you're using a self signed cert
+    haClient        = Client(haServer, haToken, 
+                             global_request_kwargs={'verify': True}, 
+                             cache_session=False)
+
+    enableHaTemp    = app.config['ENABLE_HA_TEMP']
+    if enableHaTemp:
+        haConfig    = haClient.get_config()
+        haLatitude  = float(haConfig.get('latitude'))
+        haLongitude = float(haConfig.get('longitude'))
+    
+    enableHaLights  = app.config['ENABLE_HA_LIGHTS']
+
 ###
 # Configure UI appearance
 shipName        = app.config["SHIP_NAME"]
@@ -142,8 +163,26 @@ def process():
 
 # Function for the lights - Using Pimoroni mote sticks
 def lights():
-    if enableMotes:
-        global redalertstatus
+    global serverstatus
+    redalertlights = False
+
+    if enableHaLights:
+        while True:
+            time.sleep(0.05)
+            if serverstatus["alertStatus"] == "red" and redalertlights == False:
+                scene = haClient.get_domain('scene')
+                scene.turn_on(entity_id='scene.red_alert')
+                print(f'Set Red Alert scene')
+                redalertlights = True
+                time.sleep(0.05)
+            elif serverstatus["alertStatus"] == "normal" and redalertlights == True:
+                scene = haClient.get_domain('scene')
+                scene.turn_on(entity_id='scene.office_normal')
+                print(f'Set Normal scene')
+                redalertlights = False
+                time.sleep(0.05)
+
+    elif enableMotes:
         rgb = (0, 0, 0)
         r, g, b = rgb
         increment = 1
@@ -197,9 +236,16 @@ def getbbcheadline():
 
 # If enabled you can get the current weather report from open-meteo.com sent to the all connected clients normally this is set to every 30 mins to prevent spam
 def getweatherdata():
-    # Set your Longitude and Latitude for your location (default is for Berlin Germany)
-    longitude = 13.55
-    latitude = 52.41
+    global haLatitude
+    global haLongitude
+    # Set latitude and longitude in the config or get them from Home Assistant
+    if enableHomeAssistant:
+        latitude    = haLatitude
+        longitude   = haLongitude
+    else:
+        longitude = app.config['WEATHER_LAT']
+        latitude  = app.config['WEATHER_LONG']
+    
     url = f'https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&current_weather=true'
     response = requests.get(url)
     data = response.json()
@@ -273,6 +319,29 @@ def getpimeteostats():
         except socket.timeout:
             continue # makes the shutting down faster because we don't have to wait 2 minutes
 
+# Fetch sensor data from HomeAssistant, format it and push it to all clients
+def getHaSensorData():
+    global haClient
+    global sensordata
+
+    office_temp_entity      = haClient.get_entity(entity_id='sensor.acurite_tower_b_7114_t')
+    temp_f                  = office_temp_entity.state.state
+    temp                    = (float(temp_f) - 32) * 5/9
+
+
+    office_humidity_entity  = haClient.get_entity(entity_id='sensor.acurite_tower_b_7114_h')
+    humid                   = int(office_humidity_entity.state.state)
+
+    # TODO: get a pressure sensor online
+    # office_pressure_entity  = haClient.get_entity(entity_id='sensor.GET_A_PRESSURE_SENSOR')
+    # press                   = int(office_pressure_entity.state.state)
+    press                   = -1
+
+    sensordata = {"Temperature":round(temp, 2), "Humidity":round(humid, 2), "Pressure":round(press, 2)}
+    socketio.emit('updateSensorData', sensordata)
+    print(f'Sent HA Sensor Data: {sensordata}')
+
+
 
 # Adding functions as a scheduled jobs because its a while loop running forever it should run in its own thread
 sched.add_job(lights)
@@ -293,6 +362,9 @@ if enablePicoData:
 if enablePimeteo:
     print("Pimeteo enabled")
     sched.add_job(getpimeteostats)
+if enableHaTemp:
+    print("Home Assistant Sensor Data Enabled")
+    sched.add_job(getHaSensorData, 'interval', seconds=10)
 
 # If we're running this script directly, this portion executes. The Flask
 #  instance runs with the given parameters. Note that the "host=0.0.0.0" part

@@ -40,6 +40,20 @@ class Config:
     # PiMeteo temp collection (see pimeteo-code dir)
     ENABLE_PIMETEO      = False
 
+    # Home Assistant Server
+    ENABLE_HA           = False
+    HA_API_SERVER       = 'https://homeassistant.local:8123/api'
+    HA_TOKEN            = 'abc123def456'
+
+    # Home Assistant Red Alert
+    ENABLE_HA_LIGHTS    = False
+    HA_ALERT_SCENE      = 'scene.red_alert'
+    HA_NORMAL_SCENE     = 'scene.office_normal'
+
+    # Home Assistant Temp/Humidity
+    ENABLE_HA_TEMP      = False
+    HA_TEMP_ENTITY      = 'sensor.acurite_tower_b_7114_t'
+    HA_HUMID_ENTITY     = 'sensor.acurite_tower_b_7114_h'
 
 
     @staticmethod
@@ -55,6 +69,13 @@ class DevelopmentConfig(Config):
     SHIP_CLASS           = "Oberth"
     SHIP_REGISTRY        = "NCC-68443"
     COLOR_SCHEME         = "Inglewood Violet"
+
+    # Home Assistant Server
+    ENABLE_HA           = True
+    HA_API_SERVER       = os.environ.get('HA_API_SERVER')
+    HA_TOKEN            = os.environ.get('HA_TOKEN')
+    ENABLE_HA_LIGHTS    = True
+    ENABLE_HA_TEMP      = True
 
 
 class ProductionConfig(Config):
