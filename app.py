@@ -5,7 +5,6 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor
 from flask_socketio import SocketIO, emit
 import time, random
-from datetime import datetime
 
 
 # Socket (not SocketIO) is used to receive TCP data from the PicoW
@@ -81,8 +80,14 @@ if enableRandomColorScheme:
 serverstatus = {"alertStatus":"normal", "colorSchemeName":colorSchemeName, "shipName":shipName, "shipClass":shipClass, "shipRegistry":shipRegistry, "themeColor":"rgb(255, 211, 0)", "themeColorR":255, "themeColorG":211, "themeColorB":0}
 
 # Pulling Sensor data from sensehat
+# Initialize sensordata with default values
+sensordata = {"Temperature": 0.0, "Humidity": 0.0, "Pressure": 0.0}
+
 if enableSense:
-    sensordata = {"Temperature":round(sense.temp, 2) , "Humidity":round(sense.humidity, 2) , "Pressure":round(sense.pressure, 2)}
+    try:
+        sensordata = {"Temperature":round(sense.temp, 2) , "Humidity":round(sense.humidity, 2) , "Pressure":round(sense.pressure, 2)}
+    except Exception as e:
+        print(f"Error initializing SenseHat sensor data: {e}")
 
 # Just to set the variable if it is not set yet
 if enablePimeteo and not(enableSense):
@@ -138,7 +143,6 @@ def process():
 # Function for the lights - Using Pimoroni mote sticks
 def lights():
     if enableLights:
-        global redalertstatus
         rgb = (0, 0, 0)
         r, g, b = rgb
         increment = 1
@@ -165,80 +169,108 @@ def lights():
 # Function sending sensor data to all clients
 def getsensordata():
     global sensordata
-    sensordata = {"Temperature":round(sense.temp, 2) , "Humidity":round(sense.humidity, 2) , "Pressure":round(sense.pressure, 2)}
-    print(f"Sensorhat data sent to clients: {sensordata}")
-    socketio.emit('updateSensorData', sensordata)
+    try:
+        sensordata = {"Temperature":round(sense.temp, 2) , "Humidity":round(sense.humidity, 2) , "Pressure":round(sense.pressure, 2)}
+        print(f"Sensorhat data sent to clients: {sensordata}")
+        socketio.emit('updateSensorData', sensordata)
+    except Exception as e:
+        print(f"Error reading SenseHat data: {e}")
 
 # If you have a pico w this little gem receives the data from the pico temp sensor and formats it and pushes it to all clients
 def getpicowudp():
     udp_ip = '0.0.0.0'
     udp_port = 5005
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind((udp_ip, udp_port))
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.bind((udp_ip, udp_port))
+    except OSError as e:
+        print(f"Error binding UDP socket on port {udp_port}: {e}")
+        return
 
     while True:
-        data, addr = sock.recvfrom(1024)
-        temperature = data.decode('utf-8')
-        msg = "Received remote sensor data from Pico W: " + temperature + "C"
-        sendmessage(msg, True, True)
+        try:
+            data, addr = sock.recvfrom(1024)
+            temperature = data.decode('utf-8')
+            msg = "Received remote sensor data from Pico W: " + temperature + "C"
+            sendmessage(msg, True, True)
+        except Exception as e:
+            print(f"Error receiving Pico W UDP data: {e}")
+            time.sleep(1)
 
 # If enabled you can get the last bbc headline sent to the all connected clients
 def getbbcheadline():
-    feed_url = "http://feeds.bbci.co.uk/news/rss.xml"
-    feed = feedparser.parse(feed_url)
-    entry = feed.entries[0]
-    msg = "Viewing historical news data: " + entry.title
-    sendmessage(msg, True, True)
+    try:
+        feed_url = "http://feeds.bbci.co.uk/news/rss.xml"
+        feed = feedparser.parse(feed_url)
+        if not feed.entries:
+            print("BBC feed has no entries")
+            return
+        entry = feed.entries[0]
+        msg = "Viewing historical news data: " + entry.title
+        sendmessage(msg, True, True)
+    except Exception as e:
+        print(f"Error fetching BBC headline: {e}")
 
 # If enabled you can get the current weather report from open-meteo.com sent to the all connected clients normally this is set to every 30 mins to prevent spam
 def getweatherdata():
     # Set your Longitude and Latitude for your location (default is for Berlin Germany)
     longitude = 13.55
     latitude = 52.41
-    url = f'https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&current_weather=true'
-    response = requests.get(url)
-    data = response.json()
-    current_weather = data["current_weather"]
-    temperature = current_weather["temperature"]
-    weathercode = current_weather["weathercode"]
-    weather_codes = {
-    0:"Clear skies",
-    1:"Mainly clear skies",
-    2:"Partly cloudy",
-    3:"Overcast",
-    45:"Foggy",
-    48:"Depositing rime fog",
-    51:"Light drizzle",
-    53:"Moderate drizzle",
-    55:"Dense drizzle",
-    56:"Light freezing drizzle",
-    57:"Dense freezing drizzle",
-    61:"Slight rain",
-    63:"Moderate rain",
-    65:"Heavy rain",
-    66:"Light freezing rain",
-    67:"Heavy freezing rain",
-    71:"Slight snow fall",
-    73:"Moderate snow fall",
-    75:"Heavy snow fall",
-    77:"Snow grains",
-    80:"Slight rain showers",
-    81:"Moderate rain showers",
-    82:"Violent rain showers",
-    85:"Slight snow showers",
-    86:"Heavy snow showers",
-    95:"Slight to moderate thunderstorm",
-    96:"Thunderstorm with slight hail",
-    99:"Thunderstorm with heavy hail"
-    }
-    # weather_message is pulled and written over to update the message for newly connected clients without having to pull from the server again
-    global weather_message
-    weather_description = weather_codes.get(weathercode, "Unknown weather code")
-    weather_message = f"Historical weather data - Temperature:'{temperature}' Weather classification:'{weather_description}'"
-    print(f"Fetched weather data from open-meteo.com - Temp: {temperature}, Weather code: {weathercode}")
-    sendmessage(weather_message, True, True)
+    try:
+        url = f'https://api.open-meteo.com/v1/forecast?latitude={latitude}&longitude={longitude}&current_weather=true'
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        if "current_weather" not in data:
+            print("Weather API response missing current_weather data")
+            return
+        current_weather = data["current_weather"]
+        temperature = current_weather.get("temperature", "N/A")
+        weathercode = current_weather.get("weathercode", -1)
+        weather_codes = {
+        0:"Clear skies",
+        1:"Mainly clear skies",
+        2:"Partly cloudy",
+        3:"Overcast",
+        45:"Foggy",
+        48:"Depositing rime fog",
+        51:"Light drizzle",
+        53:"Moderate drizzle",
+        55:"Dense drizzle",
+        56:"Light freezing drizzle",
+        57:"Dense freezing drizzle",
+        61:"Slight rain",
+        63:"Moderate rain",
+        65:"Heavy rain",
+        66:"Light freezing rain",
+        67:"Heavy freezing rain",
+        71:"Slight snow fall",
+        73:"Moderate snow fall",
+        75:"Heavy snow fall",
+        77:"Snow grains",
+        80:"Slight rain showers",
+        81:"Moderate rain showers",
+        82:"Violent rain showers",
+        85:"Slight snow showers",
+        86:"Heavy snow showers",
+        95:"Slight to moderate thunderstorm",
+        96:"Thunderstorm with slight hail",
+        99:"Thunderstorm with heavy hail"
+        }
+        # weather_message is pulled and written over to update the message for newly connected clients without having to pull from the server again
+        global weather_message
+        weather_description = weather_codes.get(weathercode, "Unknown weather code")
+        weather_message = f"Historical weather data - Temperature:'{temperature}' Weather classification:'{weather_description}'"
+        print(f"Fetched weather data from open-meteo.com - Temp: {temperature}, Weather code: {weathercode}")
+        sendmessage(weather_message, True, True)
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching weather data: {e}")
+    except (KeyError, ValueError) as e:
+        print(f"Error parsing weather data: {e}")
+    except Exception as e:
+        print(f"Unexpected error in getweatherdata: {e}")
 
-# Function that runs every 2 minutes to sent whats in weather_message to all connected clients so that we are not pulling from open-meteo too offten
+# Function that runs every 2 minutes to sent whats in weather_message to all connected clients so that we are not pulling from open-meteo too often
 def sendweatherdata():
     sendmessage(weather_message, True, True)
 
@@ -253,20 +285,33 @@ def getpimeteostats():
     global sensordata
     udp_ip = '0.0.0.0'
     udp_port = 5006
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind((udp_ip, udp_port))
-    sock.settimeout(5)
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.bind((udp_ip, udp_port))
+        sock.settimeout(5)
+    except OSError as e:
+        print(f"Error binding UDP socket on port {udp_port}: {e}")
+        return
 
     while True:
         try:
             data, addr = sock.recvfrom(1024)
             if data:
                 data = data.decode('utf-8')
-                temp,humid,press = data.split(",")
-                sensordata = {"Temperature":round(temp, 2), "Humidity":round(humid, 2), "Pressure":round(press, 2)}
+                parts = data.split(",")
+                if len(parts) != 3:
+                    print(f"Invalid PiMeteo data format: expected 3 values, got {len(parts)}")
+                    continue
+                temp, humid, press = parts
+                sensordata = {"Temperature":round(float(temp), 2), "Humidity":round(float(humid), 2), "Pressure":round(float(press), 2)}
                 socketio.emit('updateSensorData', sensordata)
         except socket.timeout:
             continue # makes the shutting down faster because we don't have to wait 2 minutes
+        except ValueError as e:
+            print(f"Error parsing PiMeteo data: {e}")
+        except Exception as e:
+            print(f"Unexpected error in getpimeteostats: {e}")
+            time.sleep(1)
 
 
 # Adding functions as a scheduled jobs because its a while loop running forever it should run in its own thread
